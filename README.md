@@ -2,10 +2,10 @@
 
 ## Auteurs
 
-- Robin Tirateau (e22500615)
 - Francois (SFanch)
 - Rayan (RayL4D)
 - Kevin SIDER
+- Robin Tirateau (e22500615)
 
 ---
 
