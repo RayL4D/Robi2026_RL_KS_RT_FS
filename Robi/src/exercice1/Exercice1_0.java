@@ -2,53 +2,59 @@ package exercice1;
 
 import java.awt.Color;
 import java.awt.Dimension;
+
 import graphicLayer.GRect;
 import graphicLayer.GSpace;
 
+/**
+ * Exercice 1 : Animation d'un rectangle qui se deplace le long des bords
+ * de la fenetre en boucle infinie, avec changement de couleur aleatoire
+ * a chaque tour complet.
+ */
 public class Exercice1_0 {
+
     GSpace space = new GSpace("Exercice 1", new Dimension(200, 150));
     GRect robi = new GRect();
 
+    /**
+     * Initialise l'espace graphique, ajoute le rectangle bleu
+     * et lance l'animation.
+     */
     public Exercice1_0() {
-        // 1. Initialisation : robi doit être bleu au départ
-        robi.setColor(Color.BLUE); 
+        robi.setColor(Color.BLUE);
         space.addElement(robi);
         space.open();
 
-        // 2. On lance l'animation après l'ouverture de la fenêtre
         animate();
     }
 
     private void animate() {
-        // Boucle infinie pour que l'animation se répète
         while (true) {
-            
-            // Étape 1 : Déplacement vers le bord droit
-            // On avance tant que la position X de robi + sa largeur est inférieure à la largeur de la fenêtre
+            // Deplacement vers le bord droit
             while (robi.getX() < space.getWidth() - robi.getWidth()) {
                 robi.setX(robi.getX() + 1);
-                pause(5); // Pause de 5 millisecondes
+                pause(5);
             }
 
-            // Étape 2 : Déplacement vers le bord bas
+            // Deplacement vers le bord bas
             while (robi.getY() < space.getHeight() - robi.getHeight()) {
                 robi.setY(robi.getY() + 1);
                 pause(5);
             }
 
-            // Étape 3 : Déplacement vers le bord gauche
+            // Deplacement vers le bord gauche
             while (robi.getX() > 0) {
                 robi.setX(robi.getX() - 1);
                 pause(5);
             }
 
-            // Étape 4 : Déplacement vers le bord haut
+            // Deplacement vers le bord haut
             while (robi.getY() > 0) {
                 robi.setY(robi.getY() - 1);
                 pause(5);
             }
 
-            // Étape 5 : Changement de couleur aléatoire à la fin du tour
+            // Changement de couleur aleatoire a la fin du tour
             int r = (int) (Math.random() * 256);
             int g = (int) (Math.random() * 256);
             int b = (int) (Math.random() * 256);
@@ -56,7 +62,6 @@ public class Exercice1_0 {
         }
     }
 
-    // Méthode utilitaire pour gérer la pause sans surcharger le code principal
     private void pause(int milliseconds) {
         try {
             Thread.sleep(milliseconds);
@@ -65,6 +70,11 @@ public class Exercice1_0 {
         }
     }
 
+    /**
+     * Point d'entree de l'exercice 1.
+     *
+     * @param args les arguments de la ligne de commande (non utilises)
+     */
     public static void main(String[] args) {
         new Exercice1_0();
     }
