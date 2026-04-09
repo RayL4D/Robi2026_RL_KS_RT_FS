@@ -412,6 +412,11 @@ public class RobiClientApp extends JFrame implements RobiClient.ConnectionListen
                 executeScript("(space stopBots)");
             }
         });
+
+        // Aide (bouton en haut a droite sur la ligne de connexion)
+        connectionPanel.getHelpButton().addActionListener(e -> {
+            new HelpDialog(this).setVisible(true);
+        });
     }
 
     private void setupKeyBindings() {

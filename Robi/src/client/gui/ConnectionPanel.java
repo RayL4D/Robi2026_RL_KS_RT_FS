@@ -1,5 +1,6 @@
 package client.gui;
 
+import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -19,54 +20,68 @@ public class ConnectionPanel extends JPanel {
     private final JTextField hostField;
     private final JTextField portField;
     private final StyledButton connectButton;
+    private final StyledButton helpButton;
     private final JLabel statusLabel;
     private final JLabel statusDot;
 
     /**
      * Construit le panneau de connexion avec les champs host et port,
-     * le bouton de connexion et l'indicateur de statut.
+     * le bouton de connexion, l'indicateur de statut et le bouton d'aide.
      */
     public ConnectionPanel() {
         setBackground(Theme.BG_DARK);
-        setLayout(new FlowLayout(FlowLayout.LEFT, 8, 6));
+        setLayout(new BorderLayout());
         setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.BORDER));
+
+        // Partie gauche : connexion + statut
+        JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
+        leftPanel.setBackground(Theme.BG_DARK);
 
         // Icone reseau
         JLabel netIcon = new JLabel("\u26A1");
         netIcon.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 16));
-        add(netIcon);
+        leftPanel.add(netIcon);
 
         // Label Host
         JLabel hostLabel = createLabel("H\u00f4te :");
-        add(hostLabel);
+        leftPanel.add(hostLabel);
 
         hostField = createTextField("localhost", 10);
-        add(hostField);
+        leftPanel.add(hostField);
 
         // Label Port
         JLabel portLabel = createLabel("Port :");
-        add(portLabel);
+        leftPanel.add(portLabel);
 
         portField = createTextField("12345", 5);
-        add(portField);
+        leftPanel.add(portField);
 
         // Bouton connexion
         connectButton = StyledButton.primary("Connecter");
-        add(connectButton);
+        leftPanel.add(connectButton);
 
         // Separateur
-        add(Box.createHorizontalStrut(12));
+        leftPanel.add(Box.createHorizontalStrut(12));
 
         // Statut
         statusDot = new JLabel("\u25CF ");
         statusDot.setForeground(Theme.ERROR);
         statusDot.setFont(Theme.FONT_UI_SMALL);
-        add(statusDot);
+        leftPanel.add(statusDot);
 
         statusLabel = new JLabel("D\u00e9connect\u00e9");
         statusLabel.setFont(Theme.FONT_UI_SMALL);
         statusLabel.setForeground(Theme.TEXT_SECONDARY);
-        add(statusLabel);
+        leftPanel.add(statusLabel);
+
+        add(leftPanel, BorderLayout.CENTER);
+
+        // Partie droite : bouton Aide
+        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 6));
+        rightPanel.setBackground(Theme.BG_DARK);
+        helpButton = StyledButton.primary("? Aide");
+        rightPanel.add(helpButton);
+        add(rightPanel, BorderLayout.EAST);
     }
 
     /**
@@ -98,6 +113,15 @@ public class ConnectionPanel extends JPanel {
      */
     public StyledButton getConnectButton() {
         return connectButton;
+    }
+
+    /**
+     * Retourne le bouton d'aide.
+     *
+     * @return le bouton Aide
+     */
+    public StyledButton getHelpButton() {
+        return helpButton;
     }
 
     /**
