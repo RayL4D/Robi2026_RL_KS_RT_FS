@@ -2,6 +2,7 @@ package exercice2;
 
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.Point;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
@@ -12,21 +13,29 @@ import stree.parser.SNode;
 import stree.parser.SParser;
 
 /**
- * Exercice 2.1 : Interpretation basique de scripts S-Expression.
- * Parse et execute un script qui change la couleur du space et du rectangle
- * en utilisant un arbre syntaxique (SNode).
+ * Exercice 2.2 : Ajout des commandes translate et sleep au script S-Expression.
+ * Anime un rectangle rouge en le deplacant avec des pauses entre chaque mouvement.
  */
-public class Exercice2_1_0 {
+public class Exercice2_2_0 {
 
-    GSpace space = new GSpace("Exercice 2_1", new Dimension(200, 100));
+    GSpace space = new GSpace("Exercice 2_2", new Dimension(200, 100));
     GRect robi = new GRect();
-    String script = "(space setColor black) (robi setColor yellow)";
+
+    String script = "(space color white) "
+            + "(robi color red) "
+            + "(robi translate 10 0) "
+            + "(space sleep 100) "
+            + "(robi translate 0 10) "
+            + "(space sleep 100) "
+            + "(robi translate -10 0) "
+            + "(space sleep 100) "
+            + "(robi translate 0 -10)";
 
     /**
      * Initialise l'espace graphique, ajoute le rectangle
-     * et execute le script de couleurs.
+     * et execute le script d'animation.
      */
-    public Exercice2_1_0() {
+    public Exercice2_2_0() {
         space.addElement(robi);
         space.open();
         this.runScript();
@@ -51,14 +60,25 @@ public class Exercice2_1_0 {
         String cmd = expr.get(1).contents();
 
         if (target.equals("space")) {
-            if (cmd.equals("setColor")) {
+            if (cmd.equals("color") || cmd.equals("setColor")) {
                 String colorName = expr.get(2).contents();
                 space.setColor(getColorFromString(colorName));
+            } else if (cmd.equals("sleep")) {
+                int duration = Integer.parseInt(expr.get(2).contents());
+                try {
+                    Thread.sleep(duration);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
             }
         } else if (target.equals("robi")) {
-            if (cmd.equals("setColor")) {
+            if (cmd.equals("color") || cmd.equals("setColor")) {
                 String colorName = expr.get(2).contents();
                 robi.setColor(getColorFromString(colorName));
+            } else if (cmd.equals("translate")) {
+                int dx = Integer.parseInt(expr.get(2).contents());
+                int dy = Integer.parseInt(expr.get(3).contents());
+                robi.translate(new Point(dx, dy));
             }
         }
     }
@@ -75,11 +95,11 @@ public class Exercice2_1_0 {
     }
 
     /**
-     * Point d'entree de l'exercice 2.1.
+     * Point d'entree de l'exercice 2.2.
      *
      * @param args les arguments de la ligne de commande (non utilises)
      */
     public static void main(String[] args) {
-        new Exercice2_1_0();
+        new Exercice2_2_0();
     }
 }

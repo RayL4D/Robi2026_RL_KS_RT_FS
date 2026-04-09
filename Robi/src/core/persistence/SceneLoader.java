@@ -71,6 +71,21 @@ public class SceneLoader {
             int h = extractInt(elementJson, "\"height\"", 20);
 
             if (parent != null && localName != null && type != null) {
+                // Skip Image elements — they need the file path which is not stored in JSON
+                boolean isImage = "Image".equals(type);
+                if (!isImage) {
+                    int isImgIdx = elementJson.indexOf("\"isImage\"");
+                    if (isImgIdx >= 0) {
+                        String afterKey = elementJson.substring(isImgIdx);
+                        isImage = afterKey.contains("true");
+                    }
+                }
+
+                if (isImage) {
+                    // Images will be handled separately (from command history)
+                    continue;
+                }
+
                 String fullName = parent + "." + localName;
                 commands.add("(" + parent + " add " + localName + " (" + type + " new))");
                 commands.add("(" + fullName + " setColor " + colorToName(color) + ")");

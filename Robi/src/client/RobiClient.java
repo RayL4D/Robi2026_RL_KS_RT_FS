@@ -28,6 +28,7 @@ public class RobiClient {
 
     private final List<ConnectionListener> listeners = new ArrayList<>();
     private final List<BotTickListener> botTickListeners = new ArrayList<>();
+    private final List<SyncListener> syncListeners = new ArrayList<>();
     private final LinkedBlockingQueue<String> responseQueue = new LinkedBlockingQueue<>();
 
     // ========================================================================
@@ -210,6 +211,21 @@ public class RobiClient {
                             }
                         }
                         notifyBotTick(commands);
+                    } else if (message.startsWith(RobiProtocol.PREFIX_SYNC)) {
+                        String syncData = message.substring(
+                                RobiProtocol.PREFIX_SYNC.length());
+                        String[] cmds = syncData.split(";;");
+                        List<String> commands = new ArrayList<>();
+                        for (String cmd : cmds) {
+                            if (!cmd.isEmpty()) {
+                                commands.add(cmd);
+                            }
+                        }
+                        notifySyncReceived(commands);
+                    } else if (message.startsWith(RobiProtocol.PREFIX_BROADCAST)) {
+                        String script = message.substring(
+                                RobiProtocol.PREFIX_BROADCAST.length());
+                        notifyBroadcastReceived(script);
                     } else {
                         responseQueue.put(message);
                     }
@@ -359,5 +375,63 @@ public class RobiClient {
          * @param commands la liste des commandes a executer
          */
         void onBotTick(List<String> commands);
+    }
+
+    // ========================================================================
+    // SYNC / BROADCAST LISTENERS
+    // ========================================================================
+
+    /**
+     * Ajoute un listener pour la synchronisation initiale.
+     *
+     * @param listener le listener a ajouter
+     */
+    public void addSyncListener(SyncListener listener) {
+        syncListeners.add(listener);
+    }
+
+    /**
+     * Notifie les listeners qu'une synchronisation initiale est recue.
+     *
+     * @param commands la liste des commandes de l'historique
+     */
+    private void notifySyncReceived(List<String> commands) {
+        for (SyncListener l : syncListeners) {
+            l.onSyncReceived(commands);
+        }
+    }
+
+    /**
+     * Notifie les listeners d'un script diffuse par un autre client.
+     *
+     * @param script le script diffuse
+     */
+    private void notifyBroadcastReceived(String script) {
+        for (BotTickListener l : botTickListeners) {
+            // Reuse bot tick listeners to replay broadcast commands
+        }
+        for (SyncListener l : syncListeners) {
+            l.onBroadcastReceived(script);
+        }
+    }
+
+    /**
+     * Interface de callback pour la synchronisation et la diffusion.
+     */
+    public interface SyncListener {
+
+        /**
+         * Appele lorsque l'historique complet des commandes est recu a la connexion.
+         *
+         * @param commands la liste des commandes
+         */
+        void onSyncReceived(List<String> commands);
+
+        /**
+         * Appele lorsqu'un script diffuse par un autre client est recu.
+         *
+         * @param script le script a executer
+         */
+        void onBroadcastReceived(String script);
     }
 }

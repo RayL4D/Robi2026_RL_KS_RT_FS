@@ -4,6 +4,10 @@ import java.awt.Dimension;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import core.Environment;
 import core.Reference;
@@ -26,6 +30,8 @@ public class RobiServer {
     private final GSpace space;
     private final RobibotManager botManager;
     private boolean running;
+    private final List<String> commandHistory = Collections.synchronizedList(new ArrayList<>());
+    private final List<ClientHandler> clients = new CopyOnWriteArrayList<>();
 
     /**
      * Construit un serveur Robi sur le port specifie.
@@ -35,7 +41,7 @@ public class RobiServer {
     public RobiServer(int port) {
         this.port = port;
         this.interpreter = new RobiInterpreter();
-        this.space = new GSpace("Robi Serveur", new Dimension(400, 300));
+        this.space = new GSpace("Robi Serveur", new Dimension(500, 500));
         this.botManager = new RobibotManager(interpreter);
         setupInterpreter();
     }
@@ -98,7 +104,7 @@ public class RobiServer {
             while (running) {
                 Socket clientSocket = serverSocket.accept();
                 System.out.println("Nouveau client connecte : " + clientSocket.getRemoteSocketAddress());
-                ClientHandler handler = new ClientHandler(clientSocket, interpreter, space, botManager);
+                ClientHandler handler = new ClientHandler(clientSocket, interpreter, space, botManager, this);
                 new Thread(handler, "Client-" + clientSocket.getRemoteSocketAddress()).start();
             }
         } catch (IOException e) {
@@ -138,6 +144,58 @@ public class RobiServer {
      */
     public RobibotManager getBotManager() {
         return botManager;
+    }
+
+    /**
+     * Enregistre un script dans l'historique des commandes.
+     *
+     * @param script le script execute avec succes
+     */
+    public void recordCommand(String script) {
+        commandHistory.add(script);
+    }
+
+    /**
+     * Retourne l'historique complet des commandes executees.
+     *
+     * @return une copie de l'historique
+     */
+    public List<String> getCommandHistory() {
+        synchronized (commandHistory) {
+            return new ArrayList<>(commandHistory);
+        }
+    }
+
+    /**
+     * Enregistre un client connecte.
+     *
+     * @param handler le gestionnaire du client
+     */
+    public void registerClient(ClientHandler handler) {
+        clients.add(handler);
+    }
+
+    /**
+     * Desinscrit un client deconnecte.
+     *
+     * @param handler le gestionnaire du client
+     */
+    public void unregisterClient(ClientHandler handler) {
+        clients.remove(handler);
+    }
+
+    /**
+     * Diffuse un script a tous les clients sauf l'emetteur.
+     *
+     * @param script le script a diffuser
+     * @param sender le client qui a emis le script
+     */
+    public void broadcastScript(String script, ClientHandler sender) {
+        for (ClientHandler client : clients) {
+            if (client != sender) {
+                client.sendBroadcast(script);
+            }
+        }
     }
 
     /**
