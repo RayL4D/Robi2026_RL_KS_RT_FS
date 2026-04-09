@@ -45,6 +45,12 @@ public class RobiProtocol {
     /** Prefixe pour les ticks de bots transmis du serveur au client. */
     public static final String PREFIX_BOT_TICK = "BOT_TICK:";
 
+    /** Prefixe pour la synchronisation de l'etat initial vers un nouveau client. */
+    public static final String PREFIX_SYNC = "SYNC:";
+
+    /** Prefixe pour la diffusion d'un script d'un client vers les autres clients. */
+    public static final String PREFIX_BROADCAST = "BROADCAST:";
+
     /** Marqueur de fin de message. */
     public static final String END_OF_MESSAGE = "EOM";
 
