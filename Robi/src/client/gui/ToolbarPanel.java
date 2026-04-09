@@ -524,4 +524,5 @@ public class ToolbarPanel extends JPanel {
     public StyledButton getBtnClear() {
         return btnClear;
     }
+
 }
