@@ -1,6 +1,7 @@
 package core.statemachine;
 
 import graphicLayer.GBounded;
+import graphicLayer.GElement;
 import graphicLayer.GSpace;
 
 /**
@@ -24,13 +25,13 @@ public class RobibotFactory {
      * Creates a bouncing bot that moves and bounces off the space borders.
      *
      * @param elementName the fully-qualified element name (e.g. "space.r1")
-     * @param element     the graphic element to control
+     * @param element     the graphic element to control (GBounded or GImage)
      * @param space       the parent GSpace
      * @param dx          the initial horizontal speed
      * @param dy          the initial vertical speed
      * @return a new Robibot configured with bouncing behaviour
      */
-    public static Robibot createBouncingBot(String elementName, GBounded element,
+    public static Robibot createBouncingBot(String elementName, GElement element,
                                              GSpace space, int dx, int dy) {
         Robibot bot = new Robibot(elementName, element, space);
         bot.setDirection(dx, dy);
@@ -48,9 +49,9 @@ public class RobibotFactory {
                 int bdx = b.getDx();
                 int bdy = b.getDy();
 
-                java.awt.Point pos = b.getElement().getPosition();
-                int w = b.getElement().getWidth();
-                int h = b.getElement().getHeight();
+                java.awt.Point pos = b.getPosition();
+                int w = b.getWidth();
+                int h = b.getHeight();
                 int spaceW = b.getSpace().getWidth();
                 int spaceH = b.getSpace().getHeight();
 
@@ -68,8 +69,10 @@ public class RobibotFactory {
             return false;
         });
 
-        // On entry after a bounce: change colour randomly
-        moveState.addEntryAction("({element} setColor " + randomColor() + ")");
+        // On entry after a bounce: change colour randomly (only for shapes, not images)
+        if (element instanceof GBounded) {
+            moveState.addEntryAction("({element} setColor {randomColor})");
+        }
         moveState.addTransition(collide);
 
         sm.addState(moveState);
@@ -82,12 +85,12 @@ public class RobibotFactory {
      * Creates a patrol bot that moves back and forth horizontally.
      *
      * @param elementName the fully-qualified element name (e.g. "space.r1")
-     * @param element     the graphic element to control
+     * @param element     the graphic element to control (GBounded or GImage)
      * @param space       the parent GSpace
      * @param speed       the horizontal speed
      * @return a new Robibot configured with horizontal patrol behaviour
      */
-    public static Robibot createPatrolBot(String elementName, GBounded element,
+    public static Robibot createPatrolBot(String elementName, GElement element,
                                            GSpace space, int speed) {
         return createBouncingBot(elementName, element, space, speed, 0);
     }

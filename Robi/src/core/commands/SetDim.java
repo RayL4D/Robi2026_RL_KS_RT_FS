@@ -6,12 +6,14 @@ import core.Command;
 import core.Interpreter;
 import core.Reference;
 import graphicLayer.GBounded;
+import graphicLayer.GImage;
 import graphicLayer.GSpace;
 import stree.parser.SNode;
 
 /**
  * Commande : (cible setDim largeur hauteur)
  * Redimensionne un GSpace ou un GBounded (GRect, GOval, etc.).
+ * Les GImage ne peuvent pas etre redimensionnees.
  */
 public class SetDim implements Command {
 
@@ -28,7 +30,6 @@ public class SetDim implements Command {
 
     /**
      * Execute la commande SetDim sur la reference donnee.
-     * Redimensionne un GSpace ou un GBounded avec la largeur et la hauteur specifiees.
      *
      * @param reference la reference contenant l'objet cible
      * @param method le noeud S-expression representant l'appel de commande
@@ -42,9 +43,20 @@ public class SetDim implements Command {
         Dimension newDim = new Dimension(width, height);
 
         if (receiver instanceof GSpace) {
-            ((GSpace) receiver).changeWindowSize(newDim);
+            GSpace space = (GSpace) receiver;
+            space.setPreferredSize(newDim);
+            space.setSize(newDim);
+            space.revalidate();
+            space.repaint();
+            // Propager le revalidate au parent (JViewport du JScrollPane)
+            if (space.getParent() != null) {
+                space.getParent().revalidate();
+                space.getParent().repaint();
+            }
         } else if (receiver instanceof GBounded) {
             ((GBounded) receiver).setDimension(newDim);
+        } else if (receiver instanceof GImage) {
+            System.err.println("SetDim : les images ne peuvent pas etre redimensionnees.");
         } else {
             System.err.println("SetDim : cet objet ne supporte pas le redimensionnement.");
         }
