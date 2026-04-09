@@ -1,5 +1,6 @@
 package core.statemachine;
 
+import java.awt.Point;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -8,6 +9,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import javax.swing.SwingUtilities;
 
 import core.RobiInterpreter;
+import graphicLayer.GBounded;
+import graphicLayer.GElement;
+import graphicLayer.GImage;
+import graphicLayer.GSpace;
 
 /**
  * Centralised manager for all active Robibots.
@@ -171,6 +176,96 @@ public class RobibotManager implements Runnable {
             allCommands.addAll(resolved);
         }
 
+        // Detect collisions: bot vs other bots AND bot vs all non-bot elements
+        List<Robibot> botList = new ArrayList<>(bots.values());
+
+        // Bot vs bot collisions
+        // After inversion, translate 2x to cancel the pending do-action move + separate
+        for (int i = 0; i < botList.size(); i++) {
+            for (int j = i + 1; j < botList.size(); j++) {
+                Robibot a = botList.get(i);
+                Robibot b = botList.get(j);
+                if (a.isRunning() && b.isRunning() && a.isCollidingWith(b)) {
+                    a.setDirection(-a.getDx(), -a.getDy());
+                    b.setDirection(-b.getDx(), -b.getDy());
+                    allCommands.add("(" + a.getElementName() + " translate "
+                            + (a.getDx() * 2) + " " + (a.getDy() * 2) + ")");
+                    allCommands.add("(" + b.getElementName() + " translate "
+                            + (b.getDx() * 2) + " " + (b.getDy() * 2) + ")");
+                }
+            }
+        }
+
+        // Bot vs non-bot element collisions (GBounded + GImage)
+        for (Robibot bot : botList) {
+            if (!bot.isRunning()) {
+                continue;
+            }
+            GSpace sp = bot.getSpace();
+            if (sp == null) {
+                continue;
+            }
+            GElement[] elements = sp.getRawContents();
+            for (GElement elem : elements) {
+                // Skip the bot's own element
+                if (elem == bot.getElement()) {
+                    continue;
+                }
+                // Skip elements that are themselves bots (handled above)
+                boolean isBotElem = false;
+                for (Robibot other : botList) {
+                    if (other.getElement() == elem) {
+                        isBotElem = true;
+                        break;
+                    }
+                }
+                if (isBotElem) {
+                    continue;
+                }
+                // Get position and size of the target element
+                Point p2;
+                int w2;
+                int h2;
+                if (elem instanceof GBounded) {
+                    GBounded bounded = (GBounded) elem;
+                    p2 = bounded.getPosition();
+                    w2 = bounded.getWidth();
+                    h2 = bounded.getHeight();
+                } else if (elem instanceof GImage) {
+                    GImage img = (GImage) elem;
+                    p2 = img.getPosition();
+                    w2 = img.getRawImage().getWidth(null);
+                    h2 = img.getRawImage().getHeight(null);
+                } else {
+                    continue;
+                }
+                // Get bot element bounds
+                Point p1;
+                int w1;
+                int h1;
+                if (bot.getElement() instanceof GBounded) {
+                    p1 = ((GBounded) bot.getElement()).getPosition();
+                    w1 = ((GBounded) bot.getElement()).getWidth();
+                    h1 = ((GBounded) bot.getElement()).getHeight();
+                } else if (bot.getElement() instanceof GImage) {
+                    GImage botImg = (GImage) bot.getElement();
+                    p1 = botImg.getPosition();
+                    w1 = botImg.getRawImage().getWidth(null);
+                    h1 = botImg.getRawImage().getHeight(null);
+                } else {
+                    continue;
+                }
+                boolean collides = p1.x < p2.x + w2 && p1.x + w1 > p2.x
+                        && p1.y < p2.y + h2 && p1.y + h1 > p2.y;
+                if (collides) {
+                    bot.setDirection(-bot.getDx(), -bot.getDy());
+                    allCommands.add("(" + bot.getElementName() + " translate "
+                            + (bot.getDx() * 2) + " " + (bot.getDy() * 2) + ")");
+                    break;
+                }
+            }
+        }
+
         if (!allCommands.isEmpty()) {
             executeCommands(allCommands, null);
             notifyListeners(allCommands);
@@ -185,6 +280,7 @@ public class RobibotManager implements Runnable {
      *   <li>{@code {element}} -- element name (e.g. space.r1)</li>
      *   <li>{@code {dx}} -- current horizontal direction</li>
      *   <li>{@code {dy}} -- current vertical direction</li>
+     *   <li>{@code {randomColor}} -- a random colour name from the palette</li>
      * </ul>
      *
      * @param commands the raw S-Expression list
@@ -198,9 +294,27 @@ public class RobibotManager implements Runnable {
                     .replace("{element}", bot.getElementName())
                     .replace("{dx}", String.valueOf(bot.getDx()))
                     .replace("{dy}", String.valueOf(bot.getDy()));
+            // Resolve {randomColor} with a fresh random pick each time
+            if (r.contains("{randomColor}")) {
+                r = r.replace("{randomColor}", randomColor());
+            }
             resolved.add(r);
         }
         return resolved;
+    }
+
+    /** Palette de couleurs pour les bots. */
+    private static final String[] BOT_COLORS = {
+        "red", "blue", "green", "cyan", "magenta", "orange", "yellow", "pink"
+    };
+
+    /**
+     * Returns a random colour name from the bot palette.
+     *
+     * @return a colour name string
+     */
+    private static String randomColor() {
+        return BOT_COLORS[(int) (Math.random() * BOT_COLORS.length)];
     }
 
     /**

@@ -33,6 +33,7 @@ public class ToolbarPanel extends JPanel {
     private final StyledButton btnExplosion;
 
     private final StyledButton btnDelete;
+    private final StyledButton btnResize;
 
     private final JComboBox<String> colorSelector;
 
@@ -63,7 +64,11 @@ public class ToolbarPanel extends JPanel {
     public ToolbarPanel() {
         setBackground(Theme.BG_MEDIUM);
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-        setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.BORDER));
+        // Marge basse de 14px pour laisser de la place a la scrollbar horizontale
+        setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.BORDER),
+                BorderFactory.createEmptyBorder(0, 0, 14, 0)
+        ));
 
         // Ligne 1 : Selecteur | Formes + Images | Supprimer | Couleur
         JPanel row1 = createRow();
@@ -96,6 +101,9 @@ public class ToolbarPanel extends JPanel {
 
         btnDelete = StyledButton.danger("\u2716 Suppr.");
         row1.add(btnDelete);
+
+        btnResize = new StyledButton("\u2922 Taille");
+        row1.add(btnResize);
 
         row1.add(createSeparator());
 
@@ -164,11 +172,31 @@ public class ToolbarPanel extends JPanel {
         add(row2);
     }
 
+    /**
+     * Cree une ligne de toolbar qui ne wrappe jamais ses composants.
+     * Utilise un FlowLayout dans un panel dont la preferredSize
+     * s'etend horizontalement pour contenir tous les composants,
+     * ce qui empeche le wrapping et permet le scroll horizontal.
+     */
     private JPanel createRow() {
-        JPanel row = new JPanel();
-        row.setLayout(new FlowLayout(FlowLayout.LEFT, 4, 3));
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4)) {
+            @Override
+            public Dimension getPreferredSize() {
+                // Calculer la largeur totale necessaire pour tous les composants
+                int width = 0;
+                int maxHeight = 0;
+                for (Component c : getComponents()) {
+                    Dimension d = c.getPreferredSize();
+                    width += d.width + 4; // 4 = hgap
+                }
+                width += 8; // marges FlowLayout (left inset)
+                for (Component c : getComponents()) {
+                    maxHeight = Math.max(maxHeight, c.getPreferredSize().height);
+                }
+                return new Dimension(width, maxHeight + 8); // 8 = vgap * 2
+            }
+        };
         row.setBackground(Theme.BG_MEDIUM);
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
         return row;
     }
 
@@ -387,6 +415,15 @@ public class ToolbarPanel extends JPanel {
      */
     public StyledButton getBtnDelete() {
         return btnDelete;
+    }
+
+    /**
+     * Retourne le bouton de redimensionnement.
+     *
+     * @return le bouton Resize
+     */
+    public StyledButton getBtnResize() {
+        return btnResize;
     }
 
     /**

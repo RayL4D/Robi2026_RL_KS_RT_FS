@@ -3,6 +3,7 @@ package client.gui;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -85,6 +86,7 @@ public class RobiClientApp extends JFrame implements RobiClient.ConnectionListen
     private final ScriptPanel scriptPanel;
     private final StatusBar statusBar;
 
+    private final String clientId = String.format("%02x", (int) (Math.random() * 256));
     private int rectCount = 0;
     private int ovalCount = 0;
     private int labelCount = 0;
@@ -102,7 +104,7 @@ public class RobiClientApp extends JFrame implements RobiClient.ConnectionListen
         this.client.addConnectionListener(this);
 
         this.interpreter = new RobiInterpreter();
-        this.space = new GSpace("Robi - Rendu Client", new Dimension(500, 400));
+        this.space = new GSpace("Robi - Rendu Client", new Dimension(500, 500));
         this.botManager = new RobibotManager(interpreter);
         setupLocalInterpreter();
 
@@ -114,6 +116,40 @@ public class RobiClientApp extends JFrame implements RobiClient.ConnectionListen
                 }
             })
         );
+
+        // Synchronisation : reception de l'historique et des broadcasts
+        this.client.addSyncListener(new RobiClient.SyncListener() {
+            @Override
+            public void onSyncReceived(List<String> commands) {
+                SwingUtilities.invokeLater(() -> {
+                    for (String cmd : commands) {
+                        // Ne pas executer les commandes de bots (geres par le serveur)
+                        if (cmd.contains("addBot") || cmd.contains("startBots")
+                                || cmd.contains("stopBots") || cmd.contains("delBot")) {
+                            continue;
+                        }
+                        try {
+                            interpreter.oneShot(cmd);
+                        } catch (Exception ex) {
+                            System.err.println("Sync skip: " + cmd + " -> " + ex.getMessage());
+                        }
+                    }
+                    rebuildElementSelector();
+                    updateCountersFromEnvironment();
+                    scriptPanel.appendInfo("Synchronisation recue (" + commands.size() + " commandes).");
+                    statusBar.setStatus("Synchronise", Theme.SUCCESS);
+                });
+            }
+
+            @Override
+            public void onBroadcastReceived(String script) {
+                SwingUtilities.invokeLater(() -> {
+                    interpreter.oneShot(script);
+                    rebuildElementSelector();
+                    scriptPanel.appendInfo("[Broadcast] " + script);
+                });
+            }
+        });
 
         // Composants GUI
         this.connectionPanel = new ConnectionPanel();
@@ -181,11 +217,18 @@ public class RobiClientApp extends JFrame implements RobiClient.ConnectionListen
     private void setupUI() {
         setLayout(new BorderLayout(0, 0));
 
-        // Nord : Connexion + Toolbar
+        // Nord : Connexion + Toolbar (avec scroll horizontal si fenetre trop petite)
+        JScrollPane toolbarScroll = new JScrollPane(toolbarPanel,
+                JScrollPane.VERTICAL_SCROLLBAR_NEVER,
+                JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        toolbarScroll.setBorder(null);
+        toolbarScroll.getHorizontalScrollBar().setUnitIncrement(16);
+        toolbarScroll.setMinimumSize(new Dimension(0, 0));
+
         JPanel northPanel = new JPanel();
         northPanel.setLayout(new BoxLayout(northPanel, BoxLayout.Y_AXIS));
         northPanel.add(connectionPanel);
-        northPanel.add(toolbarPanel);
+        northPanel.add(toolbarScroll);
         add(northPanel, BorderLayout.NORTH);
 
         // Centre : Canvas + Script
@@ -228,14 +271,14 @@ public class RobiClientApp extends JFrame implements RobiClient.ConnectionListen
 
         // Boutons de creation
         toolbarPanel.getBtnRect().addActionListener(e -> {
-            String name = "r" + (++rectCount);
+            String name = clientId + "_r" + (++rectCount);
             String fullName = "space." + name;
             executeScript("(space add " + name + " (Rect new))");
             toolbarPanel.addElement(fullName);
         });
 
         toolbarPanel.getBtnOval().addActionListener(e -> {
-            String name = "o" + (++ovalCount);
+            String name = clientId + "_o" + (++ovalCount);
             String fullName = "space." + name;
             executeScript("(space add " + name + " (Oval new))");
             toolbarPanel.addElement(fullName);
@@ -245,7 +288,7 @@ public class RobiClientApp extends JFrame implements RobiClient.ConnectionListen
             String text = JOptionPane.showInputDialog(this,
                     "Texte du label :", "Nouveau label", JOptionPane.PLAIN_MESSAGE);
             if (text != null && !text.isEmpty()) {
-                String name = "lbl" + (++labelCount);
+                String name = clientId + "_lbl" + (++labelCount);
                 String fullName = "space." + name;
                 executeScript("(space add " + name + " (Label new " + text + "))");
                 toolbarPanel.addElement(fullName);
@@ -254,14 +297,14 @@ public class RobiClientApp extends JFrame implements RobiClient.ConnectionListen
 
         // Boutons d'images
         toolbarPanel.getBtnAlien().addActionListener(e -> {
-            String name = "img" + (++imageCount);
+            String name = clientId + "_img" + (++imageCount);
             String fullName = "space." + name;
             executeScript("(space add " + name + " (Image new alien.gif))");
             toolbarPanel.addElement(fullName);
         });
 
         toolbarPanel.getBtnExplosion().addActionListener(e -> {
-            String name = "img" + (++imageCount);
+            String name = clientId + "_img" + (++imageCount);
             String fullName = "space." + name;
             executeScript("(space add " + name + " (Image new explosion.gif))");
             toolbarPanel.addElement(fullName);
@@ -280,6 +323,27 @@ public class RobiClientApp extends JFrame implements RobiClient.ConnectionListen
                 String child = target.substring(lastDot + 1);
                 executeScript("(" + parent + " del " + child + ")");
                 toolbarPanel.removeElement(target);
+            }
+        });
+
+        // Redimensionner l'element selectionne (y compris le space, sauf images)
+        toolbarPanel.getBtnResize().addActionListener(e -> {
+            String target = toolbarPanel.getSelectedElement();
+            // Verifier si c'est une image (non redimensionnable)
+            if (!"space".equals(target)) {
+                Reference ref = interpreter.getEnvironment().getReferenceByName(target);
+                if (ref != null && ref.getReceiver() instanceof GImage) {
+                    scriptPanel.appendError("Les images ne peuvent pas etre redimensionnees.");
+                    return;
+                }
+            }
+            String input = JOptionPane.showInputDialog(this,
+                    "Dimensions (largeur hauteur) :", "Redimensionner", JOptionPane.PLAIN_MESSAGE);
+            if (input != null && !input.isEmpty()) {
+                String[] parts = input.trim().split("\\s+");
+                String w = parts[0];
+                String h = parts.length >= 2 ? parts[1] : parts[0];
+                executeScript("(" + target + " setDim " + w + " " + h + ")");
             }
         });
 
@@ -322,16 +386,32 @@ public class RobiClientApp extends JFrame implements RobiClient.ConnectionListen
                 String[] parts = input.trim().split("\\s+");
                 String dx = parts.length >= 1 ? parts[0] : "5";
                 String dy = parts.length >= 2 ? parts[1] : "5";
-                executeScript("(space addBot " + target + " " + dx + " " + dy + ")");
+                String script = "(space addBot " + target + " " + dx + " " + dy + ")";
+                if (client.isConnected()) {
+                    // Le serveur gere les bots ; ne pas creer de bot local
+                    sendScriptToServerOnly(script);
+                } else {
+                    executeScript(script);
+                }
                 scriptPanel.appendInfo("Bot cr\u00e9\u00e9 sur " + target);
             }
         });
 
-        toolbarPanel.getBtnStartBots().addActionListener(e ->
-            executeScript("(space startBots)"));
+        toolbarPanel.getBtnStartBots().addActionListener(e -> {
+            if (client.isConnected()) {
+                sendScriptToServerOnly("(space startBots)");
+            } else {
+                executeScript("(space startBots)");
+            }
+        });
 
-        toolbarPanel.getBtnStopBots().addActionListener(e ->
-            executeScript("(space stopBots)"));
+        toolbarPanel.getBtnStopBots().addActionListener(e -> {
+            if (client.isConnected()) {
+                sendScriptToServerOnly("(space stopBots)");
+            } else {
+                executeScript("(space stopBots)");
+            }
+        });
     }
 
     private void setupKeyBindings() {
@@ -429,6 +509,31 @@ public class RobiClientApp extends JFrame implements RobiClient.ConnectionListen
     }
 
     /**
+     * Envoie un script au serveur sans executer localement.
+     * Utilise pour les commandes de bots en mode connecte (le serveur gere
+     * les bots et envoie les BOT_TICK au client).
+     *
+     * @param script le script S-Expression a envoyer au serveur
+     */
+    private void sendScriptToServerOnly(String script) {
+        statusBar.setStatus("Envoi...", Theme.WARNING);
+        new Thread(() -> {
+            try {
+                client.sendScript(script);
+                SwingUtilities.invokeLater(() -> {
+                    scriptPanel.appendSuccess(script);
+                    statusBar.setStatus("Pr\u00eat", Theme.TEXT_SECONDARY);
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> {
+                    scriptPanel.appendError(ex.getMessage());
+                    statusBar.setStatus("Erreur : " + ex.getMessage(), Theme.ERROR);
+                });
+            }
+        }).start();
+    }
+
+    /**
      * Envoie un script au serveur (si connecte) et execute les SNodes recus
      * localement. Si non connecte, execute directement en local.
      *
@@ -464,29 +569,73 @@ public class RobiClientApp extends JFrame implements RobiClient.ConnectionListen
     }
 
     private void requestScreenshot() {
-        if (!client.isConnected()) {
-            scriptPanel.appendError("Il faut \u00eatre connect\u00e9 au serveur pour demander une capture.");
-            return;
-        }
-
         statusBar.setStatus("Capture en cours...", Theme.WARNING);
+
         new Thread(() -> {
             try {
-                String base64 = client.requestScreenshot();
-                byte[] imageBytes = Base64.getDecoder().decode(base64);
-                BufferedImage image = ImageIO.read(new ByteArrayInputStream(imageBytes));
+                BufferedImage image;
 
+                if (client.isConnected()) {
+                    String base64 = client.requestScreenshot();
+                    byte[] imageBytes = Base64.getDecoder().decode(base64);
+                    image = ImageIO.read(new ByteArrayInputStream(imageBytes));
+                } else {
+                    // Capture locale du GSpace
+                    int w = space.getWidth();
+                    int h = space.getHeight();
+                    if (w <= 0 || h <= 0) {
+                        SwingUtilities.invokeLater(() -> {
+                            scriptPanel.appendError("Le canvas n'a pas de dimensions valides.");
+                            statusBar.setStatus("Erreur", Theme.ERROR);
+                        });
+                        return;
+                    }
+                    image = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+                    java.awt.Graphics2D g2d = image.createGraphics();
+                    SwingUtilities.invokeAndWait(() -> space.paint(g2d));
+                    g2d.dispose();
+                }
+
+                final BufferedImage finalImage = image;
                 SwingUtilities.invokeLater(() -> {
-                    JFrame frame = new JFrame("Capture serveur");
-                    frame.setSize(image.getWidth() + 20, image.getHeight() + 50);
+                    JFrame frame = new JFrame("Capture");
+                    frame.setSize(finalImage.getWidth() + 40, finalImage.getHeight() + 100);
                     frame.setLocationRelativeTo(this);
-                    JLabel label = new JLabel(new ImageIcon(image));
-                    label.setBorder(Theme.padding(5, 5, 5, 5));
                     frame.getContentPane().setBackground(Theme.BG_DARK);
-                    frame.add(new JScrollPane(label));
+                    frame.setLayout(new BorderLayout());
+
+                    JLabel label = new JLabel(new ImageIcon(finalImage));
+                    label.setBorder(Theme.padding(5, 5, 5, 5));
+                    frame.add(new JScrollPane(label), BorderLayout.CENTER);
+
+                    // Bouton pour enregistrer en PNG
+                    StyledButton saveBtn = StyledButton.primary("\u2B07 Enregistrer PNG");
+                    saveBtn.addActionListener(ev -> {
+                        JFileChooser fc = new JFileChooser();
+                        fc.setDialogTitle("Enregistrer la capture");
+                        fc.setSelectedFile(new File("capture.png"));
+                        if (fc.showSaveDialog(frame) == JFileChooser.APPROVE_OPTION) {
+                            try {
+                                File file = fc.getSelectedFile();
+                                if (!file.getName().toLowerCase().endsWith(".png")) {
+                                    file = new File(file.getAbsolutePath() + ".png");
+                                }
+                                ImageIO.write(finalImage, "png", file);
+                                scriptPanel.appendInfo("Capture sauvegardee : " + file.getName());
+                            } catch (IOException ex) {
+                                scriptPanel.appendError("Erreur ecriture PNG : " + ex.getMessage());
+                            }
+                        }
+                    });
+
+                    JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+                    bottomPanel.setBackground(Theme.BG_DARK);
+                    bottomPanel.add(saveBtn);
+                    frame.add(bottomPanel, BorderLayout.SOUTH);
+
                     frame.setVisible(true);
-                    scriptPanel.appendInfo("Capture du serveur re\u00e7ue et affich\u00e9e.");
-                    statusBar.setStatus("Pr\u00eat", Theme.TEXT_SECONDARY);
+                    scriptPanel.appendInfo("Capture affichee.");
+                    statusBar.setStatus("Pret", Theme.TEXT_SECONDARY);
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
@@ -572,6 +721,40 @@ public class RobiClientApp extends JFrame implements RobiClient.ConnectionListen
                     scriptPanel.appendError("Erreur chargement : " + ex.getMessage()));
             }
         }).start();
+    }
+
+    /**
+     * Met a jour les compteurs d'elements a partir de l'environnement courant
+     * pour eviter les conflits de noms apres synchronisation.
+     */
+    private void updateCountersFromEnvironment() {
+        for (String name : interpreter.getEnvironment().getAll().keySet()) {
+            // Extraire le numero le plus eleve pour chaque type
+            try {
+                if (name.contains("_r")) {
+                    int n = Integer.parseInt(name.substring(name.lastIndexOf("_r") + 2));
+                    if (n > rectCount) {
+                        rectCount = n;
+                    }
+                } else if (name.contains("_o")) {
+                    int n = Integer.parseInt(name.substring(name.lastIndexOf("_o") + 2));
+                    if (n > ovalCount) {
+                        ovalCount = n;
+                    }
+                } else if (name.contains("_lbl")) {
+                    int n = Integer.parseInt(name.substring(name.lastIndexOf("_lbl") + 4));
+                    if (n > labelCount) {
+                        labelCount = n;
+                    }
+                } else if (name.contains("_img")) {
+                    int n = Integer.parseInt(name.substring(name.lastIndexOf("_img") + 4));
+                    if (n > imageCount) {
+                        imageCount = n;
+                    }
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
     }
 
     /**

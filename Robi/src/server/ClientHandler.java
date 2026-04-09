@@ -1,20 +1,24 @@
 package server;
 
 import java.awt.Graphics2D;
+import java.awt.Point;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 
 import javax.imageio.ImageIO;
 import javax.swing.SwingUtilities;
 
+import core.Reference;
 import core.RobiInterpreter;
 import core.persistence.SceneLoader;
 import core.persistence.SceneSaver;
 import core.statemachine.RobibotManager;
+import graphicLayer.GImage;
 import graphicLayer.GSpace;
 import protocol.RobiProtocol;
 import protocol.SNodeSerializer;
@@ -32,6 +36,7 @@ public class ClientHandler implements Runnable {
     private final RobiInterpreter interpreter;
     private final GSpace space;
     private final RobibotManager botManager;
+    private final RobiServer server;
     private PrintWriter clientOut;
 
     /**
@@ -41,13 +46,15 @@ public class ClientHandler implements Runnable {
      * @param interpreter l'interpreteur Robi partage
      * @param space l'espace graphique du serveur
      * @param botManager le gestionnaire de bots
+     * @param server le serveur Robi parent
      */
     public ClientHandler(Socket socket, RobiInterpreter interpreter,
-                         GSpace space, RobibotManager botManager) {
+                         GSpace space, RobibotManager botManager, RobiServer server) {
         this.socket = socket;
         this.interpreter = interpreter;
         this.space = space;
         this.botManager = botManager;
+        this.server = server;
     }
 
     /**
@@ -74,6 +81,21 @@ public class ClientHandler implements Runnable {
             this.clientOut = out;
             botManager.addTickListener(tickListener);
 
+            // Enregistrer ce client aupres du serveur
+            server.registerClient(this);
+
+            // Envoyer un snapshot de la scene au nouveau client (synchronisation)
+            // Utilise SceneSaver pour capturer les positions ACTUELLES des elements
+            List<String> syncCommands = buildSyncCommands();
+            if (!syncCommands.isEmpty()) {
+                String syncData = String.join(";;", syncCommands);
+                synchronized (out) {
+                    out.println(RobiProtocol.PREFIX_SYNC + syncData);
+                    out.println(RobiProtocol.END_OF_MESSAGE);
+                }
+                System.out.println("Snapshot envoye au client (" + syncCommands.size() + " commandes).");
+            }
+
             String line;
             while ((line = in.readLine()) != null) {
                 // Lecture du message complet (multi-lignes jusqu'au EOM)
@@ -94,6 +116,7 @@ public class ClientHandler implements Runnable {
             System.out.println("Client deconnecte : " + socket.getRemoteSocketAddress());
         } finally {
             botManager.removeTickListener(tickListener);
+            server.unregisterClient(this);
             this.clientOut = null;
             try {
                 socket.close();
@@ -148,6 +171,10 @@ public class ClientHandler implements Runnable {
             out.println(RobiProtocol.END_OF_MESSAGE);
 
             System.out.println("Script execute : " + script.trim());
+
+            // Enregistrer dans l'historique et diffuser aux autres clients
+            server.recordCommand(script);
+            server.broadcastScript(script, this);
         } catch (Exception e) {
             sendError(out, "Erreur d'execution : " + e.getMessage());
         }
@@ -254,5 +281,76 @@ public class ClientHandler implements Runnable {
         out.println(RobiProtocol.PREFIX_ERROR + errorMessage);
         out.println(RobiProtocol.END_OF_MESSAGE);
         System.err.println("Erreur envoyee au client : " + errorMessage);
+    }
+
+    /**
+     * Construit la liste de commandes de synchronisation pour un nouveau client.
+     * Utilise SceneSaver pour capturer l'etat actuel de la scene (positions courantes),
+     * puis SceneLoader pour generer les S-Expressions de recreation.
+     * Les GImage sont traitees separement car leur chemin de fichier n'est pas
+     * stocke dans le JSON : on cherche la commande de creation originale dans l'historique.
+     *
+     * @return la liste ordonnee de S-Expressions pour recreer la scene
+     */
+    private List<String> buildSyncCommands() {
+        List<String> commands = new ArrayList<>();
+
+        try {
+            // 1. Snapshot de la scene (GBounded elements avec positions actuelles)
+            String json = SceneSaver.saveToJson(interpreter.getEnvironment(), space);
+            List<String> snapshotCommands = SceneLoader.jsonToSExpressions(json);
+            commands.addAll(snapshotCommands);
+
+            // 2. Pour les GImage, chercher les commandes de creation dans l'historique
+            //    et ajouter un translate vers la position actuelle
+            Map<String, Reference> allRefs = interpreter.getEnvironment().getAll();
+            List<String> history = server.getCommandHistory();
+
+            for (Map.Entry<String, Reference> entry : allRefs.entrySet()) {
+                String name = entry.getKey();
+                Object receiver = entry.getValue().getReceiver();
+
+                if (name.startsWith("space.") && receiver instanceof GImage) {
+                    String localName = name.substring(name.lastIndexOf('.') + 1);
+
+                    // Chercher la commande "add" originale pour cette image dans l'historique
+                    for (String cmd : history) {
+                        if (cmd.contains("add") && cmd.contains(localName)
+                                && cmd.contains("Image new")) {
+                            commands.add(cmd);
+                            break;
+                        }
+                    }
+
+                    // Ajouter un translate vers la position actuelle
+                    GImage image = (GImage) receiver;
+                    Point pos = image.getPosition();
+                    if (pos.x != 0 || pos.y != 0) {
+                        commands.add("(" + name + " translate " + pos.x + " " + pos.y + ")");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Erreur construction sync: " + e.getMessage());
+            // Fallback : utiliser l'historique des commandes
+            List<String> history = server.getCommandHistory();
+            commands.addAll(history);
+        }
+
+        return commands;
+    }
+
+    /**
+     * Envoie un script diffuse par un autre client.
+     *
+     * @param script le script a diffuser
+     */
+    public void sendBroadcast(String script) {
+        if (clientOut != null) {
+            synchronized (clientOut) {
+                clientOut.println(RobiProtocol.PREFIX_BROADCAST + script);
+                clientOut.println(RobiProtocol.END_OF_MESSAGE);
+            }
+        }
     }
 }

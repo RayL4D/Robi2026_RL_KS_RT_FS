@@ -11,6 +11,8 @@ import core.Environment;
 import core.Reference;
 import graphicLayer.GBounded;
 import graphicLayer.GElement;
+import graphicLayer.GImage;
+import graphicLayer.GString;
 import graphicLayer.GSpace;
 
 /**
@@ -95,19 +97,32 @@ public class SceneSaver {
         info.parent = fullName.substring(0, lastDot);
         info.localName = fullName.substring(lastDot + 1);
 
-        // Type: GRect -> Rect, GOval -> Oval
-        info.type = receiver.getClass().getSimpleName().substring(1);
+        // Type: GRect -> Rect, GOval -> Oval, GString -> Label, GImage -> Image
+        String rawType = receiver.getClass().getSimpleName().substring(1); // remove 'G'
+        if (receiver instanceof GString) {
+            info.type = "Label";
+        } else {
+            info.type = rawType;
+        }
 
         // Colour (protected field of GElement, accessed via reflection)
         info.color = getElementColor(receiver);
 
-        // Position and dimensions (if GBounded)
+        // Position and dimensions
         if (receiver instanceof GBounded) {
             GBounded bounded = (GBounded) receiver;
             info.x = bounded.getPosition().x;
             info.y = bounded.getPosition().y;
             info.width = bounded.getWidth();
             info.height = bounded.getHeight();
+        } else if (receiver instanceof GImage) {
+            GImage image = (GImage) receiver;
+            info.x = image.getPosition().x;
+            info.y = image.getPosition().y;
+            info.isImage = true;
+            // Image dimensions from the raw Image
+            info.width = image.getRawImage().getWidth(null);
+            info.height = image.getRawImage().getHeight(null);
         }
 
         return info;
@@ -185,6 +200,7 @@ public class SceneSaver {
         int y;
         int width = 20;
         int height = 20;
+        boolean isImage = false;
 
         /**
          * Serialises this element info to a JSON object string.
@@ -196,6 +212,7 @@ public class SceneSaver {
                     + "\"parent\": \"" + parent + "\", "
                     + "\"localName\": \"" + localName + "\", "
                     + "\"type\": \"" + type + "\", "
+                    + "\"isImage\": " + isImage + ", "
                     + "\"color\": " + SceneSaver.colorToJson(color) + ", "
                     + "\"x\": " + x + ", \"y\": " + y + ", "
                     + "\"width\": " + width + ", \"height\": " + height + " }";

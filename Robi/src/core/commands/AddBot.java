@@ -8,6 +8,8 @@ import core.statemachine.Robibot;
 import core.statemachine.RobibotFactory;
 import core.statemachine.RobibotManager;
 import graphicLayer.GBounded;
+import graphicLayer.GElement;
+import graphicLayer.GImage;
 import graphicLayer.GSpace;
 import stree.parser.SNode;
 
@@ -58,8 +60,8 @@ public class AddBot implements Command {
         }
 
         Object receiver = elementRef.getReceiver();
-        if (!(receiver instanceof GBounded)) {
-            System.err.println("AddBot : l'élément n'est pas un GBounded -> " + elementName);
+        if (!(receiver instanceof GBounded) && !(receiver instanceof GImage)) {
+            System.err.println("AddBot : l'élément n'est pas un GBounded ou GImage -> " + elementName);
             return reference;
         }
 
@@ -79,7 +81,7 @@ public class AddBot implements Command {
         }
 
         Robibot bot = RobibotFactory.createBouncingBot(
-                elementName, (GBounded) receiver, space, dx, dy);
+                elementName, (GElement) receiver, space, dx, dy);
 
         manager.addBot(bot);
         bot.start();
